@@ -181,6 +181,71 @@ describe("DiscordMessageListener", () => {
       vi.useRealTimers();
     }
   });
+
+  it("respects custom slowListenerThresholdMs config (#28566)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    try {
+      const deferred = createDeferred();
+      const handler = vi.fn(() => deferred.promise);
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as ReturnType<typeof import("../logging/subsystem.js").createSubsystemLogger>;
+      // Set a custom threshold of 60 seconds
+      const listener = new DiscordMessageListener(handler, logger, 60_000);
+
+      // Start handle() but don't await yet
+      const handlePromise = listener.handle(
+        {} as unknown as import("./monitor/listeners.js").DiscordMessageEvent,
+        {} as unknown as import("@buape/carbon").Client,
+      );
+      await expectPending(handlePromise);
+
+      // Advance time past default threshold but below custom threshold
+      vi.setSystemTime(45_000);
+      deferred.resolve();
+      await handlePromise;
+
+      // Should NOT have logged since we're below the custom 60s threshold
+      expect(logger.warn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("logs when exceeding custom slowListenerThresholdMs (#28566)", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(0);
+
+    try {
+      const deferred = createDeferred();
+      const handler = vi.fn(() => deferred.promise);
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+      } as unknown as ReturnType<typeof import("../logging/subsystem.js").createSubsystemLogger>;
+      // Set a custom threshold of 60 seconds
+      const listener = new DiscordMessageListener(handler, logger, 60_000);
+
+      const handlePromise = listener.handle(
+        {} as unknown as import("./monitor/listeners.js").DiscordMessageEvent,
+        {} as unknown as import("@buape/carbon").Client,
+      );
+      await expectPending(handlePromise);
+
+      // Advance time past the custom threshold
+      vi.setSystemTime(61_000);
+      deferred.resolve();
+      await handlePromise;
+
+      // Should have logged since we exceeded the custom 60s threshold
+      expect(logger.warn).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("discord allowlist helpers", () => {

@@ -54,9 +54,10 @@ type DiscordReactionListenerParams = {
   allowNameMatching: boolean;
   guildEntries?: Record<string, import("./allow-list.js").DiscordGuildEntryResolved>;
   logger: Logger;
+  slowListenerThresholdMs?: number;
 };
 
-const DISCORD_SLOW_LISTENER_THRESHOLD_MS = 30_000;
+const DEFAULT_SLOW_LISTENER_THRESHOLD_MS = 30_000;
 const discordEventQueueLog = createSubsystemLogger("discord/event-queue");
 
 function logSlowDiscordListener(params: {
@@ -64,8 +65,10 @@ function logSlowDiscordListener(params: {
   listener: string;
   event: string;
   durationMs: number;
+  thresholdMs?: number;
 }) {
-  if (params.durationMs < DISCORD_SLOW_LISTENER_THRESHOLD_MS) {
+  const threshold = params.thresholdMs ?? DEFAULT_SLOW_LISTENER_THRESHOLD_MS;
+  if (params.durationMs < threshold) {
     return;
   }
   const duration = formatDurationSeconds(params.durationMs, {
@@ -89,6 +92,7 @@ async function runDiscordListenerWithSlowLog(params: {
   event: string;
   run: () => Promise<void>;
   onError?: (err: unknown) => void;
+  thresholdMs?: number;
 }) {
   const startedAt = Date.now();
   try {
@@ -105,6 +109,7 @@ async function runDiscordListenerWithSlowLog(params: {
       listener: params.listener,
       event: params.event,
       durationMs: Date.now() - startedAt,
+      thresholdMs: params.thresholdMs,
     });
   }
 }
@@ -121,6 +126,7 @@ export class DiscordMessageListener extends MessageCreateListener {
   constructor(
     private handler: DiscordMessageHandler,
     private logger?: Logger,
+    private slowListenerThresholdMs?: number,
   ) {
     super();
   }
@@ -135,6 +141,7 @@ export class DiscordMessageListener extends MessageCreateListener {
         const logger = this.logger ?? discordEventQueueLog;
         logger.error(danger(`discord handler failed: ${String(err)}`));
       },
+      thresholdMs: this.slowListenerThresholdMs,
     });
   }
 }
@@ -203,6 +210,7 @@ async function runDiscordReactionHandler(params: {
         guildEntries: params.handlerParams.guildEntries,
         logger: params.handlerParams.logger,
       }),
+    thresholdMs: params.handlerParams.slowListenerThresholdMs,
   });
 }
 

@@ -300,6 +300,12 @@ export type DiscordAccountConfig = {
   activityType?: 0 | 1 | 2 | 3 | 4 | 5;
   /** Streaming URL (Twitch/YouTube). Required when activityType=1. */
   activityUrl?: string;
+  /**
+   * Threshold in milliseconds for logging slow Discord event listeners.
+   * When a listener takes longer than this threshold, a warning is logged.
+   * Default: 30000 (30 seconds).
+   */
+  slowListenerThresholdMs?: number;
 };
 
 export type DiscordConfig = {
